@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF → 키노트 변환기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --border: #e2e0d8;
+    --text: #1a1917;
+    --muted: #8a8880;
+    --accent: #2d5be3;
+    --accent-light: #eef1fd;
+    --success: #1a7a4a;
+    --success-bg: #edfaf3;
+    --danger: #c0392b;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Noto Sans KR', sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem;
+  }
+
+  header {
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: 2.5rem;
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--text);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .logo-icon svg { width: 20px; height: 20px; fill: white; }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 300;
+    margin-top: 2px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg);
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .drop-icon {
+    width: 48px; height: 48px;
+    margin: 0 auto 16px;
+    background: var(--border);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .drop-icon svg { width: 24px; height: 24px; stroke: var(--muted); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+  .drop-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  .drop-sub { font-size: 13px; color: var(--muted); }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-top: 12px;
+    letter-spacing: 0.3px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+
+  .option-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 1.5rem;
+  }
+
+  .option-btn {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--bg);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+    font-family: var(--sans);
+  }
+
+  .option-btn:hover { border-color: var(--accent); background: var(--accent-light); }
+  .option-btn.selected { border-color: var(--accent); background: var(--accent-light); }
+  .option-btn.selected .opt-title { color: var(--accent); }
+
+  .opt-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .opt-desc { font-size: 11px; color: var(--muted); }
+
+  .convert-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--text);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .convert-btn:hover:not(:disabled) { opacity: 0.85; }
+  .convert-btn:active:not(:disabled) { transform: scale(0.99); }
+  .convert-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .convert-btn svg { width: 18px; height: 18px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg);
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    font-size: 13px;
+  }
+
+  .file-info svg { width: 16px; height: 16px; stroke: var(--muted); fill: none; stroke-width: 1.5; flex-shrink: 0; }
+  .file-name { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); flex-shrink: 0; }
+
+  .progress-wrap { margin-bottom: 1rem; }
+  .progress-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .progress-label { font-size: 13px; color: var(--muted); }
+  .progress-pct { font-size: 13px; font-family: var(--mono); font-weight: 500; }
+  .progress-track { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.3s ease; }
+
+  .log-line {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--muted);
+    padding: 4px 0;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .result-card {
+    background: var(--success-bg);
+    border: 1px solid #b7e8cd;
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: 1.25rem;
+  }
+
+  .result-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 500; color: var(--success);
+    margin-bottom: 6px;
+  }
+
+  .result-title svg { width: 18px; height: 18px; stroke: var(--success); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .result-sub { font-size: 13px; color: var(--success); opacity: 0.8; margin-bottom: 1rem; }
+
+  .btn-row { display: flex; gap: 10px; }
+
+  .dl-btn {
+    flex: 1;
+    padding: 12px;
+    background: var(--success);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: var(--sans);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: opacity 0.2s;
+  }
+
+  .dl-btn:hover { opacity: 0.85; }
+  .dl-btn svg { width: 16px; height: 16px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .reset-btn {
+    padding: 12px 18px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .reset-btn:hover { border-color: var(--text); color: var(--text); }
+
+  footer {
+    margin-top: 2rem;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  #fileInput { display: none; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-icon">
+      <svg viewBox="0 0 20 20"><rect x="3" y="2" width="10" height="13" rx="1.5"/><path d="M7 16h8M11 6h2M11 9h2M5 9h4"/></svg>
+    </div>
+    <h1>PDF → 키노트 변환기</h1>
+  </div>
+  <p class="subtitle">PDF 각 페이지를 슬라이드로 변환 · 브라우저에서 바로 실행 · 서버 전송 없음</p>
+</header>
+
+<div class="card" id="uploadCard">
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="drop-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4l4 4"/><path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
+    </div>
+    <p class="drop-title">PDF 파일을 끌어다 놓거나 클릭해서 선택</p>
+    <p class="drop-sub">변환된 .pptx 파일을 다운로드 후 키노트에서 열기</p>
+    <span class="badge">브라우저 내 처리 · 파일 외부 전송 없음</span>
+  </div>
+  <input type="file" id="fileInput" accept="application/pdf">
+</div>
+
+<div class="card hidden" id="optionCard">
+  <p class="section-label">레이아웃 선택</p>
+  <div class="option-grid">
+    <button class="option-btn" data-mode="2up" onclick="selectMode(this)">
+      <div class="opt-title">2장 나란히 ★</div>
+      <div class="opt-desc">A4 가로 · 슬라이드당 PDF 2페이지</div>
+    </button>
+    <button class="option-btn" data-mode="1up" onclick="selectMode(this)">
+      <div class="opt-title">1장씩</div>
+      <div class="opt-desc">슬라이드당 PDF 1페이지</div>
+    </button>
+  </div>
+
+  <div id="fileInfoBox" class="file-info">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <span class="file-name" id="fileNameLabel"></span>
+    <span class="file-meta" id="fileMetaLabel"></span>
+  </div>
+
+  <button class="convert-btn" id="convertBtn" onclick="startConvert()">
+    <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+    변환 시작
+  </button>
+</div>
+
+<div class="card hidden" id="progressCard">
+  <div id="fileInfoProgress" class="file-info" style="margin-bottom:1.5rem;">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <span class="file-name" id="progressFileName"></span>
+    <span class="file-meta" id="progressFileMeta"></span>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-row">
+      <span class="progress-label" id="progressLabel">처리 중...</span>
+      <span class="progress-pct" id="progressPct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  </div>
+  <div class="log-line" id="logLine">준비 중...</div>
+</div>
+
+<div class="result-card hidden" id="resultCard">
+  <div class="result-title">
+    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    변환 완료
+  </div>
+  <p class="result-sub" id="resultSub">다운로드 후 더블클릭하면 키노트에서 바로 열립니다.</p>
+  <div class="btn-row">
+    <button class="dl-btn" id="dlBtn">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      PPTX 다운로드
+    </button>
+    <button class="reset-btn" onclick="resetAll()">다른 파일</button>
+  </div>
+</div>
+
+<footer>PDF.js · JSZip · 브라우저에서 100% 처리됩니다</footer>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let selectedMode = '2up';
+let pdfFile = null;
+let pptxBlob = null;
+let totalPages = 0;
+
+// 기본 선택: 2up
+document.querySelector('[data-mode="2up"]').classList.add('selected');
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === 'application/pdf') loadFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function selectMode(btn) {
+  document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedMode = btn.dataset.mode;
+}
+
+async function loadFile(f) {
+  pdfFile = f;
+  const ab = await f.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  totalPages = pdf.numPages;
+
+  document.getElementById('fileNameLabel').textContent = f.name;
+  document.getElementById('fileMetaLabel').textContent = totalPages + '페이지';
+
+  document.getElementById('uploadCard').classList.add('hidden');
+  document.getElementById('optionCard').classList.remove('hidden');
+}
+
+async function startConvert() {
+  document.getElementById('optionCard').classList.add('hidden');
+  document.getElementById('progressCard').classList.remove('hidden');
+  document.getElementById('progressFileName').textContent = pdfFile.name;
+  document.getElementById('progressFileMeta').textContent = totalPages + '페이지';
+
+  setProgress(0, '페이지 렌더링 중...');
+
+  try {
+    const ab = await pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      log(`페이지 ${i} / ${totalPages} 변환 중`);
+      setProgress(Math.round((i - 0.5) / totalPages * 75));
+      const page = await pdf.getPage(i);
+      const vp = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      pages.push({ b64: canvas.toDataURL('image/jpeg', 0.92).split(',')[1], w: vp.width, h: vp.height });
+    }
+
+    log('PPTX 구성 중...');
+    setProgress(80);
+    pptxBlob = selectedMode === '2up' ? await build2up(pages) : await build1up(pages);
+    setProgress(100, '완료!');
+
+    const slideCount = selectedMode === '2up' ? Math.ceil(totalPages / 2) : totalPages;
+    document.getElementById('resultSub').textContent = `슬라이드 ${slideCount}장 생성 · 다운로드 후 더블클릭하면 키노트에서 바로 열립니다.`;
+
+    document.getElementById('progressCard').classList.add('hidden');
+    document.getElementById('resultCard').classList.remove('hidden');
+
+    const outName = pdfFile.name.replace(/\.pdf$/i, '') + '.pptx';
+    document.getElementById('dlBtn').onclick = () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(pptxBlob);
+      a.download = outName;
+      a.click();
+    };
+  } catch(err) {
+    log('오류: ' + err.message);
+    console.error(err);
+  }
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  if (label) document.getElementById('progressLabel').textContent = label;
+}
+
+function log(msg) { document.getElementById('logLine').textContent = msg; }
+
+function resetAll() {
+  pdfFile = null; pptxBlob = null; totalPages = 0;
+  fileInput.value = '';
+  document.getElementById('uploadCard').classList.remove('hidden');
+  document.getElementById('optionCard').classList.add('hidden');
+  document.getElementById('progressCard').classList.add('hidden');
+  document.getElementById('resultCard').classList.add('hidden');
+  document.querySelector('[data-mode="2up"]').classList.add('selected');
+  document.querySelector('[data-mode="1up"]').classList.remove('selected');
+  selectedMode = '2up';
+}
+
+// A4 가로 (297×210mm) in EMU: 1mm = 36000 EMU
+// 297mm = 10692000, 210mm = 7560000
+const A4W = 10692000;
+const A4H = 7560000;
+
+async function build2up(pages) {
+  const zip = new JSZip();
+  const slides = [];
+  for (let i = 0; i < pages.length; i += 2) {
+    slides.push([pages[i], pages[i+1] || null]);
+  }
+
+  addBaseFiles(zip, slides.length, A4W, A4H);
+
+  for (let si = 0; si < slides.length; si++) {
+    const [left, right] = slides[si];
+    const halfW = Math.floor(A4W / 2);
+    const imgs = [];
+    const media = [];
+
+    // 왼쪽 이미지
+    const lName = `image${si*2+1}.jpeg`;
+    zip.file(`ppt/media/${lName}`, Uint8Array.from(atob(left.b64), c => c.charCodeAt(0)));
+    imgs.push({ name: lName, x: 0, y: 0, cx: halfW, cy: A4H, rId: 'rId1' });
+    media.push({ rId: 'rId1', name: lName });
+
+    // 오른쪽 이미지 (있을 때만)
+    if (right) {
+      const rName = `image${si*2+2}.jpeg`;
+      zip.file(`ppt/media/${rName}`, Uint8Array.from(atob(right.b64), c => c.charCodeAt(0)));
+      imgs.push({ name: rName, x: halfW, y: 0, cx: halfW, cy: A4H, rId: 'rId2' });
+      media.push({ rId: 'rId2', name: rName });
+    }
+
+    addSlide(zip, si + 1, imgs, media, A4W, A4H);
+  }
+
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+}
+
+async function build1up(pages) {
+  const zip = new JSZip();
+  addBaseFiles(zip, pages.length, A4W, A4H);
+
+  for (let si = 0; si < pages.length; si++) {
+    const p = pages[si];
+    const imgName = `image${si+1}.jpeg`;
+    zip.file(`ppt/media/${imgName}`, Uint8Array.from(atob(p.b64), c => c.charCodeAt(0)));
+    const imgs = [{ name: imgName, x: 0, y: 0, cx: A4W, cy: A4H, rId: 'rId1' }];
+    const media = [{ rId: 'rId1', name: imgName }];
+    addSlide(zip, si + 1, imgs, media, A4W, A4H);
+  }
+
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+}
+
+function addBaseFiles(zip, n, W, H) {
+  const types = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="jpeg" ContentType="image/jpeg"/>
+<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+${Array.from({length:n},(_,i)=>`<Override PartName="/ppt/slides/slide${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('\n')}
+</Types>`;
+  zip.file('[Content_Types].xml', types);
+
+  zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+</Relationships>`);
+
+  const slideRefs = Array.from({length:n},(_,i)=>`<p:sldId id="${256+i}" r:id="rId${i+1}"/>`).join('\n');
+  zip.file('ppt/presentation.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" saveSubsetFonts="1">
+<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rIdM1"/></p:sldMasterIdLst>
+<p:sldIdLst>${slideRefs}</p:sldIdLst>
+<p:sldSz cx="${W}" cy="${H}"/><p:notesSz cx="6858000" cy="9144000"/>
+</p:presentation>`);
+
+  const presRels = Array.from({length:n},(_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i+1}.xml"/>`).join('\n');
+  zip.file('ppt/_rels/presentation.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${presRels}
+<Relationship Id="rIdM1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
+</Relationships>`);
+
+  zip.file('ppt/slideMasters/slideMaster1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+</p:spTree></p:cSld>
+<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rIdL1"/></p:sldLayoutIdLst>
+</p:sldMaster>`);
+
+  zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rIdL1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+</Relationships>`);
+
+  zip.file('ppt/slideLayouts/slideLayout1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" type="blank">
+<p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+</p:spTree></p:cSld></p:sldLayout>`);
+
+  zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
+</Relationships>`);
+}
+
+function addSlide(zip, num, imgs, media, W, H) {
+  const pics = imgs.map((img, idx) => `
+<p:pic><p:nvPicPr><p:cNvPr id="${idx+2}" name="img${idx+1}"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+<p:blipFill><a:blip r:embed="${img.rId}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+<p:spPr><a:xfrm><a:off x="${img.x}" y="${img.y}"/><a:ext cx="${img.cx}" cy="${img.cy}"/></a:xfrm>
+<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`).join('');
+
+  zip.file(`ppt/slides/slide${num}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<p:cSld><p:spTree>
+<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+${pics}
+</p:spTree></p:cSld></p:sld>`);
+
+  const mediaRels = media.map(m => `<Relationship Id="${m.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${m.name}"/>`).join('\n');
+  zip.file(`ppt/slides/_rels/slide${num}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${mediaRels}
+<Relationship Id="rIdL" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+</Relationships>`);
+}
+</script>
+</body>
+</html>
