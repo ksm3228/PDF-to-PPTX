@@ -150,10 +150,11 @@
   </div>
 </div>
 
-<footer>JSZip · 브라우저에서 100% 처리 · 파일 외부 전송 없음 · v1.4</footer>
+<footer>JSZip · 브라우저에서 100% 처리 · 파일 외부 전송 없음 · v1.6</footer>
 
 <script>
 let files = [];
+let isPastingFromButton = false;
 let selectedMode = '2up';
 let pptxBlob = null;
 let dragSrcIdx = null;
@@ -163,6 +164,7 @@ const A4W = 10692000;
 const A4H = 7560000;
 
 document.addEventListener('paste', e => {
+  if (isPastingFromButton) return;
   const items = Array.from(e.clipboardData.items || []);
   const imgFiles = items
     .filter(item => item.type.startsWith('image/'))
@@ -174,17 +176,22 @@ document.addEventListener('paste', e => {
 document.getElementById('fileInput').addEventListener('change', e => { addFiles(e.target.files, false); e.target.value=''; });
 document.getElementById('fileInputMore').addEventListener('change', e => { addFiles(e.target.files, false); e.target.value=''; });
 
+const fileListEl = document.getElementById('fileList');
+fileListEl.addEventListener('dragover', e => e.preventDefault());
+fileListEl.addEventListener('drop', e => {
+  if (dragSrcIdx !== null) return;
+  e.preventDefault();
+  const fileImgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if (fileImgs.length) addFiles(fileImgs, false);
+});
+
 const dropZone = document.getElementById('dropZone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', async e => {
   e.preventDefault(); dropZone.classList.remove('drag-over');
-
-  // 1. 파일로 온 경우
   const fileImgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
   if (fileImgs.length) { addFiles(fileImgs, false); return; }
-
-  // 2. items에서 이미지 blob으로 온 경우 (Yoink 등)
   const items = Array.from(e.dataTransfer.items || []);
   const blobImgs = [];
   for (const item of items) {
@@ -197,6 +204,7 @@ dropZone.addEventListener('drop', async e => {
 });
 
 async function pasteFromClipboard() {
+  isPastingFromButton = true;
   try {
     const items = await navigator.clipboard.read();
     const imgFiles = [];
@@ -214,9 +222,11 @@ async function pasteFromClipboard() {
     }
   } catch(e) {
     alert('클립보드 접근 권한이 필요해요.\n브라우저에서 클립보드 접근을 허용해 주세요.');
+  } finally {
+    isPastingFromButton = false;
   }
 }
-  
+
 function isGeneratedName(name) {
   if (!name || name === 'blob') return true;
   if (/^image\.(png|jpe?g)$/i.test(name)) return true;
@@ -273,16 +283,6 @@ function renderFileList() {
       dragSrcIdx = null;
       renderFileList();
     });
-    // 파일 목록 자체도 외부 드롭 허용
-list.addEventListener('dragover', e => e.preventDefault());
-list.addEventListener('drop', async e => {
-  // 외부에서 드롭된 경우만 처리 (내부 순서 변경과 구분)
-  if (dragSrcIdx !== null) return;
-  e.preventDefault();
-  const fileImgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-  if (fileImgs.length) addFiles(fileImgs, false);
-});
-    
     list.appendChild(item);
   });
 }
