@@ -150,7 +150,7 @@
   </div>
 </div>
 
-<footer>JSZip · 브라우저에서 100% 처리 · 파일 외부 전송 없음 · v1.3</footer>
+<footer>JSZip · 브라우저에서 100% 처리 · 파일 외부 전송 없음 · v1.4</footer>
 
 <script>
 let files = [];
@@ -177,10 +177,23 @@ document.getElementById('fileInputMore').addEventListener('change', e => { addFi
 const dropZone = document.getElementById('dropZone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
+dropZone.addEventListener('drop', async e => {
   e.preventDefault(); dropZone.classList.remove('drag-over');
-  const imgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-  if (imgs.length) addFiles(imgs, false);
+
+  // 1. 파일로 온 경우
+  const fileImgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if (fileImgs.length) { addFiles(fileImgs, false); return; }
+
+  // 2. items에서 이미지 blob으로 온 경우 (Yoink 등)
+  const items = Array.from(e.dataTransfer.items || []);
+  const blobImgs = [];
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const f = item.getAsFile();
+      if (f) blobImgs.push(f);
+    }
+  }
+  if (blobImgs.length) { addFiles(blobImgs, false); return; }
 });
 
 async function pasteFromClipboard() {
@@ -260,6 +273,16 @@ function renderFileList() {
       dragSrcIdx = null;
       renderFileList();
     });
+    // 파일 목록 자체도 외부 드롭 허용
+list.addEventListener('dragover', e => e.preventDefault());
+list.addEventListener('drop', async e => {
+  // 외부에서 드롭된 경우만 처리 (내부 순서 변경과 구분)
+  if (dragSrcIdx !== null) return;
+  e.preventDefault();
+  const fileImgs = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if (fileImgs.length) addFiles(fileImgs, false);
+});
+    
     list.appendChild(item);
   });
 }
