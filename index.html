@@ -101,7 +101,7 @@
       <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4l4 4"/><path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
     </div>
     <p class="drop-title">이미지 파일을 끌어다 놓거나 클릭해서 선택</p>
-    <p class="drop-sub">JPG, PNG · 여러 장 동시 선택 가능</p>
+    <p class="drop-sub">JPG, PNG · 여러 장 동시 선택 가능 · Cmd+V로 붙여넣기</p>
     <span class="badge">캡처한 악보 이미지 그대로 변환</span>
   </div>
   <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg" multiple style="display:none">
@@ -165,6 +165,15 @@
 
 <script>
 let files = []; // {file, url, name}
+  // 클립보드 붙여넣기
+document.addEventListener('paste', e => {
+  const items = Array.from(e.clipboardData.items || []);
+  const imgFiles = items
+    .filter(item => item.type.startsWith('image/'))
+    .map(item => item.getAsFile())
+    .filter(Boolean);
+  if (imgFiles.length) addFiles(imgFiles);
+});
 let selectedMode = '2up';
 let pptxBlob = null;
 let dragSrcIdx = null;
@@ -189,7 +198,10 @@ function addFiles(fileList) {
   Array.from(fileList).forEach(f => {
     if (!f.type.startsWith('image/')) return;
     const url = URL.createObjectURL(f);
-    files.push({ file: f, url, name: f.name });
+    const name = (f.name && f.name !== 'image.png' && f.name !== 'blob')
+  ? f.name
+  : `클립보드_${Date.now()}_${files.length + 1}.png`;
+files.push({ file: f, url, name });
   });
   files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   if (files.length > 0) {
