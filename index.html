@@ -113,8 +113,11 @@
   </div>
   <p class="section-label">파일 순서 <span style="font-weight:400;text-transform:none;letter-spacing:0;">(드래그로 순서 변경)</span></p>
   <div class="file-list" id="fileList"></div>
-  <button class="add-more-btn" onclick="document.getElementById('fileInputMore').click()">+ 이미지 추가</button>
-  <input type="file" id="fileInputMore" accept="image/jpeg,image/png,image/jpg" multiple style="display:none">
+  <div style="display:flex; gap:8px; margin-bottom:1.25rem;">
+  <button class="add-more-btn" style="margin-bottom:0; flex:1;" onclick="document.getElementById('fileInputMore').click()">+ 이미지 추가</button>
+  <button class="add-more-btn" style="margin-bottom:0; flex:1;" onclick="pasteFromClipboard()">📋 클립보드에서 붙여넣기</button>
+</div>
+<input type="file" id="fileInputMore" accept="image/jpeg,image/png,image/jpg" multiple style="display:none">
   <button class="convert-btn" onclick="startConvert()">
     <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
     변환 시작
@@ -147,7 +150,7 @@
   </div>
 </div>
 
-<footer>JSZip · 브라우저에서 100% 처리 · 파일 외부 전송 없음</footer>
+<footer>JSZip · 브라우저에서 100% 처리 · 파일 외부 전송 없음 · v1.3</footer>
 
 <script>
 let files = [];
@@ -180,6 +183,27 @@ dropZone.addEventListener('drop', e => {
   if (imgs.length) addFiles(imgs, false);
 });
 
+async function pasteFromClipboard() {
+  try {
+    const items = await navigator.clipboard.read();
+    const imgFiles = [];
+    for (const item of items) {
+      const imgType = item.types.find(t => t.startsWith('image/'));
+      if (imgType) {
+        const blob = await item.getType(imgType);
+        imgFiles.push(new File([blob], '', { type: imgType }));
+      }
+    }
+    if (imgFiles.length) {
+      addFiles(imgFiles, true);
+    } else {
+      alert('클립보드에 이미지가 없어요.');
+    }
+  } catch(e) {
+    alert('클립보드 접근 권한이 필요해요.\n브라우저에서 클립보드 접근을 허용해 주세요.');
+  }
+}
+  
 function isGeneratedName(name) {
   if (!name || name === 'blob') return true;
   if (/^image\.(png|jpe?g)$/i.test(name)) return true;
